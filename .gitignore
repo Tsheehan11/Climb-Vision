@@ -6,6 +6,7 @@
 *.mov
 *.avi
 !sample_output/**
+outputs/
 
 # Reports (per-run output, not source)
 technique_report.json
