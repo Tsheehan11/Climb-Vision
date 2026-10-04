@@ -75,3 +75,7 @@ so metrics stay valid without a tripod.
 - Reference: Jerry Qu (Stanford CS231n), "Using Pose Estimation to Analyze
   Rock Climbing Technique" — used ViTPose + YOLOv8, worth a skim for what
   metrics correlated with skill level in their data.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
