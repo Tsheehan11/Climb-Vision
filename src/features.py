@@ -85,18 +85,23 @@ def detect_com_over_base_violations(
     frames: list[FrameData],
     margin_ratio: float = 0.15,
     min_duration_frames: int = 3,
+    frame_mask=None,
 ) -> list[TechniqueFlag]:
     """
     Flags stretches where the estimated COM x-position drifts outside the
     base-of-support x-range by more than `margin_ratio` * body_scale, for
     at least `min_duration_frames` consecutive frames (filters out
     single-frame noise rather than real weight-shift-away-from-wall events).
+
+    `frame_mask` (one bool per frame, e.g. Kinematics.on_wall) restricts the
+    check to frames where a climber is actually on the wall; without it the
+    heuristic also fires on phantom poses and on the walk to and from the wall.
     """
     flags = []
     violation_run = []
 
     for f in frames:
-        if not f.detected:
+        if not f.detected or (frame_mask is not None and not frame_mask[f.frame_idx]):
             _flush_run(violation_run, flags)
             violation_run = []
             continue

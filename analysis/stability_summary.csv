@@ -1,0 +1,5 @@
+clip,labelled_outcome,detected_outcome,agrees,on_wall_s,unstable_s,unstable_pct_of_on_wall,mean_instability,longest_hold_s,off_base_events,feet_cut_events,jolt_events,stall_events,drop_at_s,drop_height_body,unstable_before_release,unstable_s_in_last_5s,mean_instability_last_3s,mean_instability_rest_of_attempt,held_position_before_release_s,why
+20260915_route1_attempt1_fall,fall,fall,True,14.98,0.57,3.8,0.16,4.8,1,0,0,3,25.53,1.46,False,0.1,0.11,0.17,3.0,moving sideways at 2.43 body-lengths/s at release (mid-move); travelled 1.46 body-lengths sideways in the air
+20260915_route2_attempt1_send,send,no_drop_seen,True,4.77,0.23,4.9,0.22,2.7,0,0,0,0,,,,,,,,
+20260915_route3_attempt1_fall,fall,fall,True,24.96,14.35,57.5,0.58,10.0,11,1,0,2,39.77,1.76,True,3.34,0.59,0.58,10.0,unstable until 0.03s before release; torso swung through 100 degrees on the way down
+20260915_route4_attempt1_send,send,dismount,True,10.21,0.23,2.3,0.15,3.3,0,0,0,1,18.12,2.45,False,0.1,0.13,0.15,3.3,settled before release and came straight down upright

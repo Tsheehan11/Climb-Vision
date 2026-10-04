@@ -37,6 +37,7 @@ from src.features import (  # noqa: E402
     estimate_center_of_mass, base_of_support_x_range, _body_scale,
 )
 from src.overlay import SKELETON_EDGES  # noqa: E402
+from src.analysis import analyze  # noqa: E402
 
 MARGIN_RATIO = 0.15
 MIN_DURATION = 3
@@ -131,18 +132,23 @@ def crop_box(fs, w, h, pad=0.12, min_frac=0.45):
             int(min(1, cx + half_w) * w), int(min(1, cy + half_h) * h))
 
 
-def review_clip(video: Path, outdir: Path, model: str, context: int, step: int, tile_h: int):
+def review_clip(video: Path, outdir: Path, model: str, context: int, step: int, tile_h: int,
+                include_off_wall: bool = False):
     clip_dir = outdir / video.stem
     review_dir = clip_dir / "flag_review"
     review_dir.mkdir(parents=True, exist_ok=True)
 
+    cap = cv2.VideoCapture(str(video))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+
     raw = load_or_extract(video, clip_dir, model)
     frames = smooth_sequence(raw)
     metrics = [frame_metrics(f) for f in frames]
+    if not include_off_wall:
+        # same gating main.py applies: only frames with a climber on the wall
+        on_wall = analyze(raw, fps).kin.on_wall
+        metrics = [m if on_wall[i] else None for i, m in enumerate(metrics)]
     runs = violation_runs(metrics)
-
-    cap = cv2.VideoCapture(str(video))
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     n = len(frames)
 
     # decode every frame we need in one sequential pass (seeking is unreliable)
@@ -239,8 +245,11 @@ if __name__ == "__main__":
     ap.add_argument("--context", type=int, default=8, help="frames either side of the flag")
     ap.add_argument("--step", type=int, default=4, help="spacing between tiles, in frames")
     ap.add_argument("--tile-height", type=int, default=640)
+    ap.add_argument("--include-off-wall", action="store_true",
+                    help="review every raw flag, as v1 did, instead of on-wall frames only")
     args = ap.parse_args()
 
     paths = [Path(p) for v in args.videos for p in (glob.glob(v) or [v])]
     for p in paths:
-        review_clip(p, Path(args.outdir), args.model, args.context, args.step, args.tile_height)
+        review_clip(p, Path(args.outdir), args.model, args.context, args.step, args.tile_height,
+                    args.include_off_wall)

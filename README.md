@@ -1,12 +1,22 @@
 # climb-vision
 
-v1 of a climbing technique analyzer: video in -> annotated video + JSON
-report of technique flags out.
+A climbing technique analyzer: video in -> annotated video + JSON report out.
 
-Currently implements one heuristic: **center-of-mass-over-base-of-support
-violation** — flags stretches where your COM drifts outside your foot
-placements (the classic "reaching/leaning away from the wall" fault, and
-a strong precursor to falls).
+For each clip it works out:
+
+- **when you are actually on the wall** — frames with no climber, a
+  half-framed climber, or you walking to and from the wall are ignored
+- **how unstable you are** — a 0-1 instability score per frame, built from
+  weight off the feet, both feet cutting loose, and lurches of the COM,
+  grouped into timestamped events (plus long holds in one position)
+- **when you come off** — every drop to the mat, labelled as a *fall* or a
+  deliberate *dismount*, with the reasons
+- **how the two relate** — for each drop, what the instability looked like
+  in the seconds before release, compared with the rest of the attempt
+
+v1 (tagged `v1`) had a single heuristic, COM-over-base-of-support. Reviewing
+it on real footage (`analysis/flag_review.csv`) showed 36 of 50 flags fired
+on frames with no climber on the wall, which is what the on-wall gating fixes.
 
 ## Setup
 
@@ -24,12 +34,32 @@ curl -o pose_landmarker.task \
 python main.py path/to/climb.mp4
 ```
 
-Outputs `annotated_output.mp4` (skeleton overlay + on-screen flags) and
-`technique_report.json` (structured flag list with timestamps).
+Outputs `outputs/<clip>/annotated.mp4` (skeleton, status strip, event and
+fall banners) and `outputs/<clip>/report.json` (`summary`, `drops`,
+`instability_events`, and the v1 `flags`). Add `--no-video` for the report only.
 
-**Filming tip:** static camera (tripod or clip mount), side-on, hip-height,
-far enough back to catch your full body through the moves. v1 assumes a
-static camera — handheld support (motion compensation) is a planned v2.
+```bash
+python scripts/summarize_stability.py    # one row per clip -> analysis/stability_summary.csv
+python scripts/review_flags.py "videos/*.mp4"   # contact sheets for each COM-over-base flag
+```
+
+Name clips `..._fall.mp4` / `..._send.mp4` and the summary also checks the
+detected outcome against the real one.
+
+**Filming tip:** static camera (tripod or clip mount), far enough back to
+keep your whole body in frame for the whole climb, including the top and
+the landing. Start and stop recording away from the lens if you can.
+Handheld support (motion compensation) is a planned v2.
+
+**Camera angle matters.** From behind, "weight off the feet" means your
+hips are sideways of your feet. From side-on, the same measurement means
+your hips are away from the wall. The numbers are comparable within one
+angle, not across them.
+
+**What the fall / dismount label is based on.** A drop is called a fall if
+you were unstable just before letting go, were moving sideways at release,
+tumbled, or were thrown sideways in the air; otherwise it is a dismount.
+These rules were set on four clips, so treat the label as a first guess.
 
 ## Project structure
 
@@ -38,21 +68,31 @@ climb-vision/
 ├── main.py                  # CLI entry point
 ├── src/
 │   ├── pose_extraction.py   # MediaPipe wrapper: video -> per-frame keypoints
-│   ├── features.py          # keypoints -> climbing-specific technique metrics
-│   └── overlay.py           # draws skeleton + flags back onto the video
+│   ├── kinematics.py        # keypoints -> COM/limb tracks; is a climber on the wall?
+│   ├── stability.py         # per-frame instability score + events
+│   ├── falls.py             # drops, fall vs. dismount, lead-up to each drop
+│   ├── features.py          # v1 COM-over-base heuristic
+│   ├── analysis.py          # runs the above in order, builds the report
+│   └── overlay.py           # draws skeleton + status + banners onto the video
+├── scripts/
+│   ├── review_flags.py      # contact sheets + diagnostics for each flag
+│   └── summarize_stability.py   # per-clip comparison table
+├── analysis/                # review logs and summaries from real footage
 └── requirements.txt
 ```
 
 ## Roadmap
 
-**v1 (this)** — static camera, rule-based COM-over-base flagging, skeleton
+**v1** — static camera, rule-based COM-over-base flagging, skeleton
 overlay + JSON report.
+
+**v1.1 (this branch)** — on-wall gating, instability score and events,
+fall/dismount detection, instability-before-fall lead-up.
 
 **v1.x** — more heuristics:
 - hip rotation angle (flagging / twist-lock detection)
 - dead-point / contact-time analysis (how long a hand hovers before committing)
-- fall/dismount detection (sudden vertical hip velocity spike) to
-  auto-segment attempts from a longer recording session
+- use the detected drops to auto-segment a longer session into attempts
 
 **v2** — handheld camera support via optical-flow-based motion compensation,
 so metrics stay valid without a tripod.
