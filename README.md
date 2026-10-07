@@ -14,9 +14,118 @@ For each clip it works out:
 - **how the two relate** — for each drop, what the instability looked like
   in the seconds before release, compared with the rest of the attempt
 
-v1 (tagged `v1`) had a single heuristic, COM-over-base-of-support. Reviewing
-it on real footage (`analysis/flag_review.csv`) showed 36 of 50 flags fired
-on frames with no climber on the wall, which is what the on-wall gating fixes.
+## Progress
+
+| Stage | Status | Where |
+|---|---|---|
+| v1: pose extraction, one heuristic, overlay, report | Done, tagged `v1` | `main` |
+| v1 tested on real footage | Done: 4 clips, all 50 flags reviewed | `analysis/flag_review.csv` |
+| v1.1: on-wall gating, instability, falls | Built, checked on the same 4 clips | branch `v1.1-stability-and-falls` |
+| v1.1 tested on new footage | Not started | — |
+
+**What testing v1 showed.** v1 had a single heuristic: flag any stretch
+where the centre of mass (COM) sits sideways of both feet. On four real
+clips (two falls, two sends, filmed 2026-09-15) it raised 50 flags:
+
+| Verdict | Flags | What it was |
+|---|---|---|
+| False positive | 36 | No climber on the wall: climber cut off by the frame edge (11), skeleton drawn on holds with nobody there (10), walking to or from the wall (8), hand over the lens (6), bad leg tracking (1) |
+| True but not a fault | 6 | Real position, but normal for the move (sit start, high step, mid foot-swap) |
+| Plausibly correct | 6 | Hips held well to one side of the feet for a second or more |
+| Other | 2 | One was the fall itself, one had unreliable leg tracking |
+
+So v1's geometry was fine; its problem was not knowing when to look. It
+also could not tell a wobble from a fall.
+
+**What v1.1 changed, measured on the same four clips.**
+
+- The 50 flags drop to 13. None of the 36 false positives remain and all 6
+  plausibly-correct ones are kept.
+- The outcome matches the filename label on 4 of 4 clips: both falls are
+  called falls, the jump-off after a send is called a dismount, and the
+  send that climbs out of frame reports no drop.
+
+| Clip | Detected | On wall | Unstable | Lead-up to the drop |
+|---|---|---|---|---|
+| route1 (fall) | fall at 25.5s | 15.0s | 3.8% | Stable beforehand; came off mid-move, travelling sideways |
+| route2 (send) | no drop seen | 4.8s | 4.9% | Climbs out of the top of the frame |
+| route3 (fall) | fall at 39.8s | 25.0s | 57.5% | Unstable most of the climb, then a 10s hold, then off |
+| route4 (send) | dismount at 18.1s | 10.2s | 2.3% | Settled at the top, dropped straight down |
+
+**What is not proven yet.** Four clips built the rules and the same four
+checked them, so the numbers above are a best case. The fall-vs-dismount
+rules rest on three drops. Nothing has been checked for *missed* events:
+the review only judged flags that fired.
+
+## How it works
+
+Each step feeds the next. All distances are measured in "body-lengths"
+(shoulder-to-hip distance), so results do not depend on how far away the
+camera is.
+
+1. **Find the body** (`pose_extraction.py`). MediaPipe looks at every frame
+   and returns 14 joint positions (shoulders, elbows, wrists, hips, knees,
+   ankles, toes), each with a confidence. A 5-frame average removes jitter.
+
+2. **Decide whether to trust the frame** (`kinematics.py`). A frame counts as
+   "climber present" only if the pose is detected almost continuously for
+   half a second either side (phantom skeletons on holds flicker), the torso
+   is inside the frame, and the body is a normal size for the clip (rules
+   out walking up to the lens). The COM is estimated as 60% hips, 40%
+   shoulders.
+
+3. **Decide whether you are on the wall** (`kinematics.py`). The lowest point
+   your feet reach in the clip is taken as the mat. You are "on the wall"
+   when your feet are clear of the mat and your COM is higher than it would
+   be standing. Everything after this step only looks at on-wall frames.
+
+4. **Find drops** (`falls.py`). A drop is the COM moving down fast (peaking
+   above 4 body-lengths/s) for at least one body-length. Sitting down or
+   lowering onto a hold is too slow to count.
+
+5. **Score instability** (`stability.py`). Each on-wall frame gets a score
+   from 0 to 1, the highest of three signals:
+   - *weight off the feet*: how far the COM is sideways of both feet
+     (1.0 = a full body-length)
+   - *feet cut loose*: both feet moving fast at once (one foot moving is
+     just a step)
+   - *lurch*: sudden acceleration of the COM
+
+   A score of 0.5 or more held for 0.3s becomes an **instability event**.
+   Separately, staying within about a third of a body-length for 3s or more
+   is logged as a **stall**.
+
+6. **Label each drop and explain it** (`falls.py`). A drop is a **fall** if
+   any one of these is true, otherwise a **dismount**:
+   - an instability event ended within 3s of letting go
+   - you were moving sideways at release (mid-move)
+   - your torso swung through more than 60 degrees on the way down
+   - you travelled more than a body-length sideways in the air
+
+   Each drop also records the lead-up: average instability in the last 1s
+   and 3s against the rest of the attempt, and how long you had been holding
+   one position.
+
+7. **Write the outputs** (`analysis.py`, `overlay.py`). `report.json` and the
+   annotated video.
+
+**Reading `report.json`:**
+
+- `summary`: outcome, seconds on the wall, seconds and percent unstable,
+  longest hold, event counts
+- `drops`: one entry per drop, with `kind` (fall or dismount), `reasons`,
+  and `lead_up`
+- `instability_events`: each event's kind, start time, duration and detail
+- `flags`: the original v1 COM flags, on-wall frames only
+
+**Reading the annotated video:** the strip along the bottom shows the state
+(NO CLIMBER, ON GROUND, ON WALL, AIRBORNE) and the instability bar (green
+below 0.35, amber to 0.5, red above). Banners at the top name the current
+instability event, stall, or drop. A grey skeleton means the pose model
+fired on something the analysis ignored.
+
+**To change how sensitive it is,** every threshold is a named constant at
+the top of `kinematics.py`, `stability.py` and `falls.py`.
 
 ## Setup
 
